@@ -177,8 +177,25 @@ shouldComponentUpdate(next) { return next.sig !== this.props.sig; }
 render() {
 var month = this.props.month;
 var v = this.props.v;
-return html`<section data-month=${month.idx} aria-label=${month.name} style=${css(`contain: layout paint; flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px`)}><h2 style=${css(`margin: 0 0 6px; padding: 0 4px; font-family: ${v.numFont}; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; color: ${v.inkHead}`)}>${month.name}</h2>${(month.rows || []).map((row, $index) => html`<div data-row=${row.key} onPointerMove=${row.move} onPointerDown=${row.move} style=${css(`flex: 0 0 auto; height: ${row.h}px; display: flex; gap: 4px; overflow: hidden; transition: height 240ms cubic-bezier(0.22, 1, 0.36, 1)`)}>${(row.cells || []).map((cell, $index) => html`<button type="button" aria-label=${cell.label} aria-hidden=${cell.hidden} disabled=${cell.disabled} onClick=${cell.open} onPointerDown=${cell.down} style=${css(`flex: 0 0 ${cell.w}px; width: ${cell.w}px; min-width: 0; height: 100%; box-sizing: border-box; padding: 6px 0 0 7px; border: 0; border-radius: 12px; background: #FFFFFF; color: #1F1A33; font-family: ${v.numFont}; font-size: ${cell.size}px; font-weight: 500; line-height: 1; display: flex; align-items: flex-start; justify-content: flex-start; position: relative; overflow: hidden; white-space: nowrap; cursor: pointer; visibility: ${cell.vis}; transition: flex-basis 240ms cubic-bezier(0.22, 1, 0.36, 1), width 240ms cubic-bezier(0.22, 1, 0.36, 1), font-size 240ms cubic-bezier(0.22, 1, 0.36, 1)`)}>${cell.hasPhoto ? html`<img src=${cell.photo} alt="기록 사진" style=${css(`position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none`)}/>` : null}<span style=${css(`position: relative; color: ${cell.numColor}; text-shadow: ${cell.numShadow}`)}>${cell.d}</span>${cell.hasTag ? html`<span style=${css(`position: absolute; left: 4px; right: 4px; bottom: 4px; box-sizing: border-box; padding: 3px 6px; border-radius: 7px; background: rgba(255, 255, 255, 0.88); color: #1F1A33; font-family: ${v.koFont}; font-size: 11px; line-height: 1.25; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`)}>${cell.tag}</span>` : null}</button>`)}</div>`)}</section>`;
+return html`<section data-month=${month.idx} aria-label=${month.name} style=${css(`contain: layout paint; flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px`)}><h2 style=${css(`margin: 0 0 6px; padding: 0 4px; font-family: ${v.numFont}; font-size: 20px; font-weight: 700; letter-spacing: 0.04em; color: ${v.inkHead}`)}>${month.name}</h2>${(month.rows || []).map((row, $index) => html`<div data-row=${row.key} onPointerMove=${row.move} onPointerDown=${row.move} style=${css(`flex: 0 0 auto; height: ${row.h}px; display: flex; gap: 4px; overflow: hidden; transition: height 240ms cubic-bezier(0.22, 1, 0.36, 1)`)}>${(row.cells || []).map((cell, $index) => html`<button type="button" aria-label=${cell.label} aria-hidden=${cell.hidden} disabled=${cell.disabled} onClick=${cell.open} onPointerDown=${cell.down} style=${css(`flex: 0 0 ${cell.w}px; width: ${cell.w}px; min-width: 0; height: 100%; box-sizing: border-box; padding: 6px 0 0 7px; border: 0; border-radius: 12px; background: #FFFFFF; color: #1F1A33; font-family: ${v.numFont}; font-size: ${cell.size}px; font-weight: 500; line-height: 1; display: flex; align-items: flex-start; justify-content: flex-start; position: relative; overflow: hidden; white-space: nowrap; cursor: pointer; visibility: ${cell.vis}; transition: flex-basis 240ms cubic-bezier(0.22, 1, 0.36, 1), width 240ms cubic-bezier(0.22, 1, 0.36, 1), font-size 240ms cubic-bezier(0.22, 1, 0.36, 1)`)}>${cell.hasPhoto ? html`<img src=${cell.photo} alt="기록 사진" style=${css(`position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none`)}/>` : null}<span style=${css(`position: relative; color: ${cell.numColor}; text-shadow: ${cell.numShadow}`)}>${cell.d}</span>${cell.hasTag ? html`<span style=${css(`position: absolute; left: 4px; right: 4px; bottom: 4px; box-sizing: border-box; padding: 3px 6px; border-radius: 7px; background: rgba(255, 255, 255, 0.88); color: #1F1A33; font-family: ${v.koFont}; line-height: 1.25; text-align: left; display: flex; flex-direction: column; gap: 1px; overflow: hidden`)}>${cell.tags.map((tg) => html`<span style=${css(`display: block; white-space: nowrap; overflow: hidden; font-size: ${tg.fs}px; letter-spacing: ${tg.ls}px`)}>${tg.t}</span>`)}</span>` : null}</button>`)}</div>`)}</section>`;
 }
+}
+
+// 글자 폭 재기: 칸에 다 들어가도록 자간(필요하면 크기)을 계산
+var MEASURE_CTX = null;
+function fitLine(text, family, avail) {
+if (!MEASURE_CTX) MEASURE_CTX = document.createElement('canvas').getContext('2d');
+var base = 11;
+MEASURE_CTX.font = base + 'px ' + family;
+var w0 = MEASURE_CTX.measureText(text).width;
+var n = Math.max(text.length, 1);
+if (w0 <= avail) return { t: text, fs: base, ls: 0 };
+// ① 자간을 줄여서 맞춤 (최대 -1.5px)
+var ls = Math.max((avail - w0) / n, -1.5);
+// ② 그래도 넘치면 글자 크기를 살짝 줄임 (최소 8px)
+var fs = base;
+if (w0 + ls * n > avail) fs = Math.max(8, Math.floor(((avail - ls * n) / w0) * base * 10) / 10);
+return { t: text, fs: fs, ls: Math.round(ls * 100) / 100 };
 }
 
 function view(v) {
@@ -843,6 +860,7 @@ var M = (c.FOCUS_RATIO * cw) / base;
 var hasF = st.fm != null;
 
 var entries = self.getEntries();
+var koFam = "'" + (this.props.koFont ?? 'Single Day') + "', sans-serif";
 var months = c.counts.map(function (n, m) {
 var rows = [];
 var nr = Math.ceil(n / 7);
@@ -860,7 +878,14 @@ var real = day <= n;
 var ent = real ? entries[m + '-' + day] : null;
 var lt = ent ? self.latest(ent) : null;
 var ph = lt ? thumb(self.firstPhoto(lt.rec)) : '';
-var tag = lt && lt.rec.title ? lt.rec.title + ' / ' + self.anniv(m, day, lt.year) : '';
+// 그 날짜의 모든 기록 (최근 해부터) → 한 줄에 하나씩
+var tags = [];
+if (ent && w > 70) {
+Object.keys(ent).sort(function (a, b) { return b - a; }).forEach(function (yy) {
+var rc = ent[yy];
+if (rc && rc.title) tags.push(fitLine(rc.title + ' / ' + self.anniv(m, day, +yy), koFam, w - 20));
+});
+}
 return {
 d: real ? day : '',
 w: w.toFixed(2),
@@ -873,8 +898,8 @@ hasPhoto: !!ph,
 photo: ph,
 numColor: ph ? '#FFFFFF' : 'inherit',
 numShadow: ph ? '0 1px 3px rgba(0, 0, 0, 0.5)' : 'none',
-hasTag: !!tag && w > 70,
-tag: tag,
+hasTag: tags.length > 0,
+tags: tags,
 open: real ? (function (mm, dd) { return function () { if (!(self.state || {}).editor && Date.now() - (self._openedAt || 0) > 600) self.openEditor(mm, dd); }; })(m, day) : null,
 down: real ? (function (mm, dd) { return function (e) { self._press = { m: mm, d: dd, x: e.clientX, y: e.clientY, t: Date.now() }; }; })(m, day) : null
 };
@@ -891,7 +916,7 @@ idx: m,
 name: c.en[m],
 rows: rows,
 sig: rows.map(function (rw) {
-return rw.h + ':' + rw.cells.map(function (cl) { return cl.w + '/' + cl.size + '/' + (cl.photo || '').slice(-32) + '/' + (cl.hasTag ? cl.tag : ''); }).join(',');
+return rw.h + ':' + rw.cells.map(function (cl) { return cl.w + '/' + cl.size + '/' + (cl.photo || '').slice(-32) + '/' + (cl.hasTag ? cl.tags.map(function (x) { return x.t + x.fs + x.ls; }).join(';') : ''); }).join(',');
 }).join('|')
 };
 });
