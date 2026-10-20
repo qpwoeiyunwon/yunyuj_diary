@@ -218,7 +218,9 @@ NEIGHBOR: 0.6,       // 양옆 1칸 = 커서 칸의 60%
 FAR: 0.6,            // 바깥 칸들의 상대 크기 (남는 폭을 이 비율로 나눔)
 SIGMA_V: 0.75,       // 세로 파동 폭 (위아래 1줄 ≈ 41%, 2줄 ≈ 3%)
 PIN_MS: 300,         // 애니메이션 시간 + 여유
-SWIPE_MONTH: 140,    // 스마트폰: 이만큼(px) 이상 위아래로 끌어야 다음/이전 달로 넘어감
+FLICK_SPEED: 0.5,    // 스마트폰: 손을 떼기 직전 속도가 이 값(px/ms, 초당 500px) 이상이면 '휙 넘기기'
+FLICK_MIN: 30,       // 휙 넘기기로 인정할 최소 이동 거리(px)
+FLICK_WINDOW: 40,    // 속도 기준점: 손을 뗀 순간보다 최소 40ms 전의 가장 최근 위치
 counts: [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
 en: ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'],
 ab: ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
@@ -340,9 +342,10 @@ var el = this._el;
 if (!el) return;
 cancelAnimationFrame(this._alignRaf);
 var start = el.scrollTop;
-var t0 = performance.now();
+var t0 = null;
 var DUR = 380, HOLD = 420;
 var step = function (now) {
+if (t0 === null) t0 = now;
 var sec = el.querySelector('[data-month="' + i + '"]');
 if (!sec) return;
 var hh = (self.state || {}).hh || 102;
@@ -411,20 +414,42 @@ self.setState({ fm: null, fr: null, fc: null });
 onTouchPt: function (e) {
 var t = e.touches && e.touches[0];
 if (!t) return;
+var now = performance.now();
 self._pt = { x: t.clientX, y: t.clientY };
-if (e.type === 'touchstart') { self._touch = { y0: t.clientY, paged: false }; cancelAnimationFrame(self._alignRaf); }
-var tc = self._touch;
-if (tc && !tc.paged && Math.abs(t.clientY - tc.y0) >= self.cfg().SWIPE_MONTH) {
-// 한 번 끌 때 한 달씩: 위로 끌면 다음 달, 아래로 끌면 이전 달
-tc.paged = true;
-var cur = (self.state || {}).cur || 0;
-var next = Math.min(Math.max(cur + (t.clientY < tc.y0 ? 1 : -1), 0), 11);
-if (next !== cur) self.handlers().goMonth(next);
+if (e.type === 'touchstart') {
+self._touch = { y0: t.clientY, samples: [{ y: t.clientY, t: now }] };
+cancelAnimationFrame(self._alignRaf);
+} else if (self._touch) {
+var sm = self._touch.samples;
+sm.push({ y: t.clientY, t: now });
+if (sm.length > 20) sm.shift();
 }
+// 터치 중에는 어떤 동작이든 파동만 손가락을 따라감 (화면은 움직이지 않음)
 cancelAnimationFrame(self._tRaf);
 self._tRaf = requestAnimationFrame(function () { self.focusAtPoint('pointer'); });
 },
-onTouchEnd: function () { self._touch = null; },
+// 손을 뗄 때: 마지막 순간 속도로 '휙 넘기기'인지 판단 → 맞으면 다음/이전 달
+onTouchEnd: function (e) {
+var tc = self._touch;
+self._touch = null;
+if (!tc || !e || e.type !== 'touchend') return;
+var ct = e.changedTouches && e.changedTouches[0];
+var now = performance.now();
+var yEnd = ct ? ct.clientY : tc.samples[tc.samples.length - 1].y;
+var cf = self.cfg();
+// 기준점: 손을 떼기 최소 40ms 전의 가장 최근 위치 (멈췄다 떼면 위치 차이가 없어 속도 0)
+var from = tc.samples[0];
+for (var i = tc.samples.length - 1; i >= 0; i--) {
+if (now - tc.samples[i].t >= cf.FLICK_WINDOW) { from = tc.samples[i]; break; }
+}
+if (now - from.t < 8) return;
+var speed = (yEnd - from.y) / (now - from.t);
+if (Math.abs(speed) < cf.FLICK_SPEED || Math.abs(yEnd - tc.y0) < cf.FLICK_MIN) return;
+// 위로 휙 → 다음 달, 아래로 휙 → 이전 달
+var cur = (self.state || {}).cur || 0;
+var next = Math.min(Math.max(cur + (speed < 0 ? 1 : -1), 0), 11);
+if (next !== cur) self.handlers().goMonth(next);
+},
 onWheelStop: function () { cancelAnimationFrame(self._alignRaf); },
 openPicker: function () { self.setState({ pickerOpen: true }); },
 closePicker: function () { self.setState({ pickerOpen: false }); },
