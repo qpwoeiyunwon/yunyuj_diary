@@ -353,14 +353,14 @@ this._moveRaf = requestAnimationFrame(function () { self.setState(self._pending)
 }
 // 월 이동: 해당 월 이름이 제목 박스 바로 밑에 오도록 부드럽게 스크롤
 // (이동 중 파동으로 칸 크기가 바뀌어도 목표 위치를 매 프레임 다시 계산해서 정확히 맞춤)
-alignMonth(i) {
+alignMonth(i, instant) {
 var self = this;
 var el = this._el;
 if (!el) return;
 cancelAnimationFrame(this._alignRaf);
 var start = el.scrollTop;
 var t0 = null;
-var DUR = 380, HOLD = 420;
+var DUR = instant ? 0 : 380, HOLD = instant ? 500 : 420;
 var step = function (now) {
 if (t0 === null) t0 = now;
 var sec = el.querySelector('[data-month="' + i + '"]');
@@ -368,7 +368,7 @@ if (!sec) return;
 var hh = (self.state || {}).hh || 102;
 var max = el.scrollHeight - el.clientHeight;
 var target = Math.min(Math.max(sec.offsetTop - (hh + 10), 0), max);
-var k = Math.min((now - t0) / DUR, 1);
+var k = DUR ? Math.min((now - t0) / DUR, 1) : 1;
 var ease = 1 - Math.pow(1 - k, 3);
 el.scrollTop = start + (target - start) * ease;
 if (now - t0 < DUR + HOLD) self._alignRaf = requestAnimationFrame(step);
@@ -397,7 +397,19 @@ handlers() {
 var self = this;
 if (!this._h) {
 this._h = {
-scrollRef: function (el) { self._el = el; },
+scrollRef: function (el) {
+self._el = el;
+// 달력이 사라지면(처음 화면으로 전환 등) 다음에 다시 나타날 때 또 현재 월로 맞추도록 초기화
+if (!el) { self._didInitScroll = false; return; }
+if (!self._didInitScroll) {
+self._didInitScroll = true;
+// 제목 박스 높이를 잰 뒤, 현재 월이 박스 바로 밑에 오도록 즉시 맞춤
+requestAnimationFrame(function () {
+if (self._measure) self._measure();
+requestAnimationFrame(function () { self.alignMonth(new Date().getMonth(), true); });
+});
+}
+},
 headerRef: function (el) { self._hdr = el; },
 onScroll: function (e) {
 var el = e.currentTarget;
